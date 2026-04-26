@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>精準營養評估系統 | Premium</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; background: #fbfcfd; color: #334155; }
+        
+        /* 縮放呼吸感轉場 */
+        .page-transition { 
+            animation: scaleIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; 
+        }
+        @keyframes scaleIn { 
+            from { opacity: 0; transform: scale(0.92); } 
+            to { opacity: 1; transform: scale(1); } 
+        }
+
+        .glass-card { background: #ffffff; border: 1px solid #f1f5f9; box-shadow: 0 10px 30px -5px rgba(0,0,0,0.04); }
+        .progress-bar { transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .btn-hover:active { transform: scale(0.96); }
+        
+        /* 自定義滾動條 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body class="antialiased">
+    <div id="app" class="max-w-md mx-auto min-h-screen flex flex-col justify-center px-6 py-12"></div>
+
+    <script>
+        /** * 索引對照表：
+         * 0:優質蛋白素, 1:維生素 A, 2:維生素 B, 3:維生素 C, 4:維生素 E, 5:卵磷脂, 
+         * 6:纖維, 7:鈣鎂 D, 8:益生菌, 9:大蒜片, 10:魚油, 11:綜合營養片 
+         */
+        const questions = [
+            { q: "01. 您每天吃蔬菜、水果少於兩次", tags: [1, 2, 3, 6, 7, 8, 11] },
+            { q: "02. 您經常三餐不足或不定時用餐", tags: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+            { q: "03. 您常吃速食、零食、泡麵等食物 (三餐)", tags: [0, 2, 3, 6, 8, 10, 11] },
+            { q: "04. 您經常沒有吃早餐 (或是早午餐當一餐)", tags: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+            { q: "05. 您經常吃油炸食物或經常吃宵夜", tags: [0, 2, 3, 4, 5, 6, 8, 9, 10, 11] },
+            { q: "06. 您經常喝酒 (應酬) 抽菸或嚼檳榔的習慣", tags: [0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11] },
+            { q: "07. 您沒有每天喝牛奶或羊奶", tags: [0, 2, 7, 8, 11] },
+            { q: "08. 您現在是長期吃 (蛋奶、全素者)", tags: [0, 2, 5, 7, 8, 11] },
+            { q: "09. 您經常節食以減輕體重", tags: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+            { q: "10. 您經常打針、吃藥 (含中、西藥及補品)", tags: [0, 2, 3, 4, 8, 10, 11] },
+            { q: "11. 您經常熬夜導致睡眠少於6小時或早上起不來", tags: [0, 1, 2, 3, 4, 5, 8, 9, 10, 11] },
+            { q: "12. 您常常感覺到倦怠或精神不濟", tags: [0, 2, 3, 4, 7, 8, 10, 11] },
+            { q: "13. 您經常感冒", tags: [0, 1, 2, 3, 8, 9, 11] },
+            { q: "14. 您很容易緊張或工作壓力大", tags: [0, 1, 2, 3, 7, 10, 11] },
+            { q: "15. 您沒有每天定時排便或排便不順暢", tags: [0, 2, 3, 6, 7, 8, 11] },
+            { q: "16. 您的排便顏色經常是黑色或深褐色", tags: [0, 1, 2, 3, 4, 8, 11] },
+            { q: "17. 您經常胃酸過多 (胃脹氣) 或胃痛 (胃食道逆流)", tags: [0, 3, 6, 7, 8, 9, 11] },
+            { q: "18. 您經常腹瀉或消化不良", tags: [0, 1, 2, 3, 4, 8, 11] },
+            { q: "19. 您頭皮屑過多、經常頭皮癢", tags: [0, 1, 2, 7, 11] },
+            { q: "20. 您的鼻子或皮膚有過敏的現象 (氣喘)", tags: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11] },
+            { q: "21. 您常乾咳", tags: [0, 1, 2, 3, 4, 5, 9, 11] },
+            { q: "22. 您經常對某些食物或保養品有過敏的現象", tags: [0, 1, 2, 3, 4, 5, 6, 8, 9, 11] },
+            { q: "23. 您經常口乾舌燥、嘴唇乾裂或嘴角破裂", tags: [2, 3, 4] },
+            { q: "24. 您在夜間視覺常覺得較差或怕光", tags: [0, 1, 3, 4, 7, 9, 11] },
+            { q: "25. 您的眼睛常常感覺疲勞、乾澀或刺痛", tags: [0, 1, 2, 3, 4, 10] },
+            { q: "26. 您容易暈車或暈船", tags: [0, 2, 9] },
+            { q: "27. 您的背上有很多痘痘", tags: [1, 2, 3, 4, 5, 6, 8, 10, 11] },
+            { q: "28. 您有黑斑、雀斑、或身體有不明的斑點", tags: [0, 1, 2, 3, 4, 5, 6, 8, 11] },
+            { q: "29. 您有青春痘或粉刺", tags: [0, 1, 2, 3, 4, 5, 6, 11] },
+            { q: "30. 您常有抽筋的現象 (手、腳)", tags: [5, 7] },
+            { q: "31. 您常有筋骨痠痛的現象", tags: [0, 3, 7, 11] },
+            { q: "32. 您的生理期會感到疼痛 (下腹部)", tags: [0, 2, 4, 5, 7, 8, 9, 10, 11] },
+            { q: "33. 您經常頭痛", tags: [1, 3, 4, 5, 7, 10, 11] },
+            { q: "34. 您容易失眠或睡不著 (多夢、易醒)", tags: [2, 3, 4, 7, 9, 11] },
+            { q: "35. 您經常情緒不佳、暴躁、 沮喪或憂鬱", tags: [2, 3, 7, 11] },
+            { q: "36. 您的頭髮枯黃、易分岔斷裂", tags: [0, 2, 3, 5, 11] },
+            { q: "37. 您的指甲有白斑、條紋或容易斷裂", tags: [0, 1, 3, 4, 11] },
+            { q: "38. 您有貧血現象 (易暈眩、體力差)", tags: [0, 2, 3, 4, 7, 11] },
+            { q: "39. 您平常容易手腳冰冷", tags: [0, 2, 3, 4, 5, 7, 10, 11] },
+            { q: "40. 您很容易健忘或集中力有衰退現象", tags: [5, 7, 10, 11] },
+            { q: "41. 您的傷口不易癒合 (大、小傷口)", tags: [0, 1, 3, 4, 11] },
+            { q: "42. 您牙齦容易出血或身上容易瘀血", tags: [0, 2, 3, 7, 11] },
+            { q: "43. 您的體重有過重的現象", tags: [0, 3, 5, 6, 7, 8, 10, 11] },
+            { q: "44. 您的血壓偏高或血脂肪過高", tags: [0, 2, 3, 4, 5, 6, 7, 8, 9, 10] },
+            { q: "45. 您的尿酸過高或有痛風現象", tags: [1, 2, 3, 4, 7, 9, 11] },
+            { q: "46. 您的血糖過高或有糖尿病症狀", tags: [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11] },
+            { q: "47. 您現在已經懷孕或在哺乳", tags: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] }
+        ];
+
+        const categoryNames = ["優質蛋白素", "維生素 A", "維生素 B", "維生素 C", "維生素 E", "卵磷脂", "纖維", "鈣鎂 D", "益生菌", "大蒜片", "魚油", "綜合營養片"];
+        let scores = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let currentIndex = -1;
+        const app = document.getElementById('app');
+
+        function handle(isYes) {
+            if (isYes) {
+                questions[currentIndex].tags.forEach(index => {
+                    scores[index]++;
+                });
+            }
+            currentIndex++;
+            render();
+        }
+
+        // 數字跑錶效果函式
+        function animateNumber(element, target) {
+            let start = 0;
+            let duration = 800; // 0.8秒
+            let startTime = null;
+
+            function step(timestamp) {
+                if (!startTime) startTime = timestamp;
+                let progress = Math.min((timestamp - startTime) / duration, 1);
+                element.innerText = Math.floor(progress * target);
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                }
+            }
+            window.requestAnimationFrame(step);
+        }
+
+        function renderResult() {
+            let resultData = categoryNames.map((name, i) => ({ name: name, score: scores[i] }));
+            resultData.sort((a, b) => b.score - a.score);
+
+            const getBadge = (score) => {
+                if (score >= 10) return `<span class="px-2 py-0.5 rounded text-[10px] bg-rose-50 text-rose-500 border border-rose-100 font-bold tracking-tighter ml-2 italic">急需補充</span>`;
+                if (score >= 7) return `<span class="px-2 py-0.5 rounded text-[10px] bg-amber-50 text-amber-500 border border-amber-100 font-bold tracking-tighter ml-2 italic">注意</span>`;
+                return `<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-500 border border-emerald-100 font-bold tracking-tighter ml-2 italic">良好</span>`;
+            };
+
+            let listHtml = resultData.map((item, index) => `
+                <div class="flex items-center justify-between py-4 border-b border-slate-50 last:border-0">
+                    <div class="flex items-center">
+                        ${getBadge(item.score)}
+                        <span class="text-slate-600 font-medium text-sm tracking-tight">&nbsp;&nbsp;${item.name}</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-16 h-1.5 bg-slate-50 rounded-full overflow-hidden hidden sm:block">
+                            <div class="h-full bg-slate-200" style="width: ${Math.min(item.score * 10, 100)}%"></div>
+                        </div>
+                        <span class="font-black text-base ${item.score >= 7 ? (item.score >= 10 ? 'text-rose-500' : 'text-amber-500') : 'text-emerald-500'} tracking-tighter w-8 text-right score-num" data-target="${item.score}">0</span>
+                    </div>
+                </div>
+            `).join('');
+
+            app.innerHTML = `
+                <div class="page-transition pb-10">
+                    <div class="text-center mb-8">
+                        <h2 class="text-2xl font-black text-slate-800 tracking-tight">個人化營養分析報告</h2>
+                        <p class="text-[10px] text-slate-400 mt-2 font-bold tracking-[0.2em] uppercase">Diagnostic Report</p>
+                    </div>
+                    <div class="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 mb-6">
+                        ${listHtml}
+                    </div>
+                    <div class="px-2 text-center">
+                        <button onclick="location.reload()" class="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-xs tracking-[0.2em] uppercase hover:bg-slate-800 transition-all btn-hover shadow-lg">
+                            重新檢測分析
+                        </button>
+                    </div>
+                </div>`;
+
+            // 啟動數字跳動
+            document.querySelectorAll('.score-num').forEach(el => {
+                animateNumber(el, parseInt(el.dataset.target));
+            });
+        }
+
+        function render() {
+            if (currentIndex === -1) {
+                app.innerHTML = `
+                    <div class="text-center page-transition px-4">
+                        <div class="w-20 h-20 bg-emerald-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-emerald-100">
+                            <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                        <h1 class="text-3xl font-black text-slate-800 mb-3 tracking-tight">精準營養評估系統</h1>
+                        <p class="text-slate-400 mb-12 text-sm font-medium leading-relaxed">身體表徵數位化分析<br>精準對應您的營養補給</p>
+                        <button onclick="currentIndex=0;render()" class="w-full py-5 bg-emerald-500 text-white rounded-2xl font-black text-sm tracking-[0.2em] shadow-2xl shadow-emerald-100 hover:bg-emerald-600 transition-all btn-hover uppercase">
+                            進入診斷程序
+                        </button>
+                        <p class="mt-12 text-[10px] text-slate-300 font-bold tracking-[0.3em] uppercase underline underline-offset-8 decoration-slate-100">Nutrition Quiz</p>
+                    </div>`;
+            } else if (currentIndex < questions.length) {
+                const progress = ((currentIndex + 1) / questions.length) * 100;
+                app.innerHTML = `
+                    <div class="page-transition">
+                        <div class="mb-10 text-center">
+                            <div class="flex justify-between items-end mb-4 px-1">
+                                <span class="text-[10px] font-black text-slate-300 tracking-[0.2em] uppercase">Phase ${currentIndex + 1}</span>
+                                <span class="text-emerald-500 text-xs font-black tracking-tighter">${Math.round(progress)}%</span>
+                            </div>
+                            <div class="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
+                                <div class="h-full bg-emerald-500 progress-bar shadow-[0_0_8px_rgba(16,185,129,0.4)]" style="width: ${progress}%"></div>
+                            </div>
+                        </div>
+                        <div class="glass-card p-10 rounded-[2.5rem] text-center border-b-[6px] border-emerald-50/50">
+                            <h2 class="text-lg md:text-xl font-bold text-slate-700 leading-relaxed mb-12 min-h-[4rem] px-2">
+                                ${questions[currentIndex].q}？
+                            </h2>
+                            <div class="flex flex-col gap-4">
+                                <button onclick="handle(true)" class="py-4 bg-emerald-500 text-white rounded-2xl font-bold text-sm tracking-widest shadow-lg shadow-emerald-100 hover:bg-emerald-600 transition-all btn-hover uppercase">
+                                    是 (YES)
+                                </button>
+                                <button onclick="handle(false)" class="py-4 bg-slate-100 text-slate-400 rounded-2xl font-bold text-sm tracking-widest hover:bg-rose-50 hover:text-rose-400 transition-all btn-hover uppercase border border-slate-200">
+                                    否 (NO)
+                                </button>
+                            </div>
+                        </div>
+                    </div>`;
+            } else {
+                renderResult();
+            }
+        }
+        render();
+    </script>
+</body>
+</html>
